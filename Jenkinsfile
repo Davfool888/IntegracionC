@@ -69,6 +69,28 @@ pipeline {
             }
         }
         
+        stage('Limpieza de Puerto') {
+            steps {
+                echo "Limpiando puerto 8081..."
+                sh '''
+                    # Buscar contenedor que usa el puerto 8081
+                    CONTAINER_ID=$(docker ps -q --filter "publish=8081")
+                    if [ ! -z "$CONTAINER_ID" ]; then
+                        echo "Deteniendo contenedor $CONTAINER_ID que usa puerto 8081"
+                        docker stop $CONTAINER_ID
+                        docker rm $CONTAINER_ID
+                        echo "Puerto 8081 liberado"
+                    else
+                        echo "Puerto 8081 disponible"
+                    fi
+                    
+                    # Limpiar contenedor actual si existe
+                    docker stop integracion-continua-24 || true
+                    docker rm integracion-continua-24 || true
+                '''
+            }
+        }
+        
         stage('Construcción Docker') {
             steps {
                 echo "Construyendo imagen Docker..."
