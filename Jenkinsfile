@@ -4,6 +4,8 @@ pipeline {
     environment {
         DOCKER_IMAGE = "integracion-continua:${env.BUILD_NUMBER}"
         CONTAINER_NAME = "integracion-continua-${env.BUILD_NUMBER}"
+        // Puerto dinámico para evitar conflictos (8080 + número de build)
+        DEPLOY_PORT = "808${env.BUILD_NUMBER}"
     }
     
     stages {
@@ -69,6 +71,23 @@ pipeline {
             }
         }
         
+        stage('Limpieza Previa') {
+            steps {
+                echo "Limpiando contenedores anteriores..."
+                sh """
+                    # Detener y eliminar contenedor actual si existe
+                    docker stop ${env.CONTAINER_NAME} || true
+                    docker rm ${env.CONTAINER_NAME} || true
+                    
+                    # Liberar puerto si está ocupado por otro contenedor
+                    docker stop $(docker ps -q --filter "publish=${env.DEPLOY_PORT}") 2>/dev/null || true
+                    docker rm $(docker ps -aq --filter "publish=${env.DEPLOY_PORT}") 2>/dev/null || true
+                    
+                    echo "Puerto ${env.DEPLOY_PORT} liberado para uso"
+                """
+            }
+        }
+        
         stage('Construcción Docker') {
             steps {
                 echo "Construyendo imagen Docker..."
@@ -95,14 +114,13 @@ pipeline {
             steps {
                 echo "Desplegando contenedor..."
                 sh """
-                    docker stop ${env.CONTAINER_NAME} || true
-                    docker rm ${env.CONTAINER_NAME} || true
+                    echo "Usando puerto: ${env.DEPLOY_PORT}"
                     
-                    docker run -d --name ${env.CONTAINER_NAME} -p 8081:80 ${env.DOCKER_IMAGE}
-                    sleep 5
+                    docker run -d --name ${env.CONTAINER_NAME} -p ${env.DEPLOY_PORT}:80 ${env.DOCKER_IMAGE}
+                    sleep 8
                     
                     echo "Verificando estado del contenedor:"
-                    docker ps | grep ${env.CONTAINER_NAME} || echo "Contenedor no encontrado en ps"
+                    docker ps --format "table {{.Names}}\\t{{.Ports}}\\t{{.Status}}" | grep ${env.CONTAINER_NAME} || echo "Contenedor no listado"
                     
                     echo "Todos los contenedores:"
                     docker ps -a | grep ${env.CONTAINER_NAME} || echo "Contenedor no existe"
@@ -111,7 +129,7 @@ pipeline {
             post {
                 success {
                     echo "Contenedor desplegado exitosamente"
-                    echo "Aplicación disponible en: http://localhost:8081"
+                    echo "Aplicación disponible en: http://localhost:${env.DEPLOY_PORT}"
                 }
             }
         }
@@ -120,12 +138,12 @@ pipeline {
             steps {
                 echo "Verificando despliegue..."
                 sh """
-                    sleep 8
+                    sleep 5
                     
-                    if curl -f http://localhost:8081 > /dev/null 2>&1; then
-                        echo "Aplicación respondiendo correctamente en puerto 8081"
+                    if curl -f http://localhost:${env.DEPLOY_PORT} > /dev/null 2>&1; then
+                        echo "Aplicación respondiendo correctamente en puerto ${env.DEPLOY_PORT}"
                         echo "Contenido de la página:"
-                        curl -s http://localhost:8081 | head -n 5
+                        curl -s http://localhost:${env.DEPLOY_PORT} | head -n 5
                     else
                         echo "Aplicación no responde - puede ser normal en entornos de prueba"
                         docker logs ${env.CONTAINER_NAME} || echo "No se pueden ver logs del contenedor"
@@ -144,6 +162,7 @@ pipeline {
             echo "Número de build: ${currentBuild.number}"
             echo "Contenedor: ${env.CONTAINER_NAME}"
             echo "Imagen: ${env.DOCKER_IMAGE}"
+            echo "URL aplicación: http://localhost:${env.DEPLOY_PORT}"
             echo "================================"
             
             sh 'rm -f Main.java Main.class 2>/dev/null || true'
