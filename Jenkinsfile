@@ -75,13 +75,13 @@ pipeline {
             steps {
                 echo "Construyendo imagen Docker..."
                 sh """
-                    if [ -f "Dockerfile" ]; then
-                        echo "Encontrado Dockerfile existente"
-                        docker build -t ${env.DOCKER_IMAGE} .
+                    if [ -f "frontend/Dockerfile" ]; then
+                        echo "Encontrado Dockerfile en frontend/"
+                        docker build -t ${env.DOCKER_IMAGE} frontend/
                         echo "Imagen Docker construida: ${env.DOCKER_IMAGE}"
                         docker images | grep integracion-continua || echo "Imagen no listada"
                     else
-                        echo "No se encontró Dockerfile - creando uno básico..."
+                        echo "No se encontró Dockerfile en frontend/ - creando uno básico..."
                         echo "FROM nginx:alpine" > Dockerfile
                         echo "RUN mkdir -p /usr/share/nginx/html" >> Dockerfile
                         echo "COPY . /usr/share/nginx/html/" >> Dockerfile
