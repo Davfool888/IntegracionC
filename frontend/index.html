@@ -1,15 +1,119 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventarios</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventario Scrum</title>
+<style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    input, button { padding: 6px; margin: 2px 0; }
+    .action-btn { cursor: pointer; color: blue; text-decoration: underline; border: none; background: none; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1> Prueba de compose up</h1>
-        <h2>Nuevo texto de prueba para commit</h2>
-        
-        
+
+<h1>Inventario - Metodología Scrum</h1>
+
+<h2>Añadir Producto</h2>
+<form id="form-producto">
+    <input type="text" id="nombre" placeholder="Nombre" required>
+    <input type="text" id="tipo" placeholder="Tipo de objeto" required>
+    <input type="text" id="referencia" placeholder="Número de registro" required>
+    <button type="submit">Añadir</button>
+</form>
+
+<h2>Lista de Productos</h2>
+<table id="tabla-productos">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Referencia</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Productos se mostrarán aquí -->
+    </tbody>
+</table>
+
+<script>
+const apiBase = "http://localhost:5000/productos";
+
+// Cargar productos
+async function cargarProductos() {
+    const res = await fetch(apiBase);
+    const productos = await res.json();
+    const tbody = document.querySelector("#tabla-productos tbody");
+    tbody.innerHTML = "";
+    productos.forEach(p => {
+        tbody.innerHTML += `
+        <tr data-id="${p.id}">
+            <td>${p.id}</td>
+            <td><input type="text" value="${p.nombre}" class="edit-nombre"></td>
+            <td><input type="text" value="${p.tipo}" class="edit-tipo"></td>
+            <td><input type="text" value="${p.referencia}" class="edit-referencia"></td>
+            <td>
+                <button class="action-btn btn-guardar">Guardar</button>
+                <button class="action-btn btn-eliminar">Eliminar</button>
+            </td>
+        </tr>
+        `;
+    });
+
+    // Agregar eventos de guardar y eliminar
+    document.querySelectorAll(".btn-guardar").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+            const row = e.target.closest("tr");
+            const id = row.dataset.id;
+            const data = {
+                nombre: row.querySelector(".edit-nombre").value,
+                tipo: row.querySelector(".edit-tipo").value,
+                referencia: row.querySelector(".edit-referencia").value
+            };
+            await fetch(`${apiBase}/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            });
+            cargarProductos(); // refresca la tabla
+        });
+    });
+
+    document.querySelectorAll(".btn-eliminar").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+            const row = e.target.closest("tr");
+            const id = row.dataset.id;
+            await fetch(`${apiBase}/${id}`, { method: "DELETE" });
+            cargarProductos(); // refresca la tabla
+        });
+    });
+}
+
+// Añadir producto
+document.getElementById("form-producto").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = {
+        nombre: document.getElementById("nombre").value,
+        tipo: document.getElementById("tipo").value,
+        referencia: document.getElementById("referencia").value
+    };
+    await fetch(apiBase, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+    });
+    e.target.reset();
+    cargarProductos();
+});
+
+// Inicializar tabla
+cargarProductos();
+</script>
+
 </body>
 </html>

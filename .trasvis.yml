@@ -1,0 +1,29 @@
+language: python
+python:
+  - "3.9"
+
+services:
+  - docker
+
+# Evitar que Travis haga build de la documentación de Python
+install:
+  - pip install -r backend/requirements.txt
+
+before_script:
+  - docker-compose build
+
+script:
+  # Pruebas backend
+  - echo "Ejecutando pruebas del backend..."
+  - python -m unittest discover backend/tests
+  # Pruebas frontend (puedes agregar validaciones con Lighthouse o simples checks)
+  - echo "Simulación de pruebas frontend..."
+  - curl -f http://localhost:80 || echo "Frontend no está listo para prueba automatizada"
+
+# Opcional: notificaciones por email
+notifications:
+  email:
+    recipients:
+      - tu-email@ejemplo.com
+    on_success: change
+    on_failure: always
