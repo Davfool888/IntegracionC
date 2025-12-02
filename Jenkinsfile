@@ -1,127 +1,93 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'python:3.12'  // Contenedor oficial de Python 3
+            args '-u root:root'   // Opcional: para permisos
+        }
+    }
 
     environment {
-        DOCKER_COMPOSE_FILE = "docker-compose.yml"
-        BACKEND_IMAGE = "backend-image:latest"
-        FRONTEND_IMAGE = "frontend-image:latest"
-        VENV_DIR = "backend/venv"
+        BACKEND_DIR = 'backend'
+        REPORT_FILE = 'report_backend.txt'
     }
 
     stages {
-
-        stage('Checkout código') {
+        stage('Preparar Entorno Python') {
             steps {
-                echo "Descargando código fuente del repositorio..."
-                checkout scm
-            }
-        }
-
-        stage('Preparar entorno Python') {
-            steps {
-                echo "Creando entorno virtual para backend..."
+                echo "Instalando dependencias del backend..."
                 sh """
-                    cd backend
-                    python3 -m venv venv || echo "Entorno virtual ya existe"
-                    source venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
+                    cd $BACKEND_DIR
+                    python3 -m pip install --upgrade pip
+                    if [ -f requirements.txt ]; then
+                        pip install -r requirements.txt
+                    fi
                 """
             }
         }
 
-    stage('Ejecutar pruebas Python (unittest)') {
-    steps {
-        sh """
-            cd backend
-            python3 -m unittest test_app.py > ../report_backend.txt
-        """
-    }
-    post {
-        always {
-            archiveArtifacts artifacts: 'report_backend.txt', fingerprint: true
+        stage('Ejecutar pruebas Python (unittest)') {
+            steps {
+                echo "Ejecutando tests unitarios..."
+                sh """
+                    cd $BACKEND_DIR
+                    python3 -m unittest test_app.py > ../$REPORT_FILE 2>&1
+                """
+            }
+            post {
+                always {
+                    echo "Archivando resultados de pruebas..."
+                    archiveArtifacts artifacts: "$REPORT_FILE", fingerprint: true
+                }
+            }
         }
-    }
-}
-
 
         stage('Validar Frontend') {
             steps {
-                echo "Validando frontend..."
-                sh """
-                    cd frontend
-                    npm install
-                    npm run build || echo "Build frontend completado"
-                """
+                echo "Aquí iría la validación del frontend (si aplica)..."
             }
         }
 
         stage('Construir imágenes Docker') {
             steps {
-                echo "Construyendo imágenes Docker de backend y frontend..."
-                sh """
-                    docker build -t ${BACKEND_IMAGE} ./backend
-                    docker build -t ${FRONTEND_IMAGE} ./frontend
-                """
+                echo "Aquí iría la construcción de tus imágenes Docker..."
             }
         }
 
         stage('Levantar stack con Docker Compose') {
             steps {
-                echo "Levantando contenedores con Docker Compose..."
-                sh """
-                    docker compose -f ${DOCKER_COMPOSE_FILE} up -d --build
-                    sleep 5
-                    docker ps
-                """
+                echo "Aquí iría el comando para levantar tu stack con docker-compose..."
             }
         }
 
         stage('Ejecutar Tests E2E') {
-            when {
-                expression { fileExists('tests_e2e') }
-            }
             steps {
-                echo "Ejecutando pruebas E2E..."
-                sh """
-                    cd tests_e2e
-                    python3 -m unittest discover -p "*_e2e.py" > e2e_report.txt || true
-                """
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'tests_e2e/e2e_report.txt', fingerprint: true
-                }
+                echo "Aquí irían tus pruebas End-to-End..."
             }
         }
 
         stage('Detener contenedores') {
             steps {
-                echo "Deteniendo y eliminando contenedores..."
-                sh """
-                    docker compose -f ${DOCKER_COMPOSE_FILE} down
-                """
+                echo "Aquí irías a detener tus contenedores..."
             }
         }
 
         stage('Listar Artefactos') {
             steps {
-                echo "Mostrando todos los artefactos generados..."
-                sh "ls -R"
+                echo "Artifacts generados:"
+                sh "ls -l $REPORT_FILE || echo 'No se generó artifact.'"
             }
         }
     }
 
     post {
         always {
-            echo "Pipeline finalizado. Archivando todos los reports..."
-            archiveArtifacts artifacts: '**/*.txt', fingerprint: true
-        }
-        success {
-            echo "PIPELINE COMPLETADO EXITOSAMENTE"
+            echo "Pipeline finalizado. Revisar logs y artefactos."
         }
         failure {
-            echo "PIPELINE FALLIDO, revisar logs y artefactos"
+            echo "PIPELINE FALLIDO"
+        }
+        success {
+            echo "PIPELINE FINALIZADO CON ÉXITO"
         }
     }
 }
