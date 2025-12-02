@@ -1,8 +1,8 @@
 pipeline {
     agent {
         docker {
-            image 'python:3.12'  // Contenedor oficial de Python 3
-            args '-u root:root'   // Opcional: para permisos
+            image 'python:3.12'
+            args '-u root:root'
         }
     }
 
@@ -12,6 +12,7 @@ pipeline {
     }
 
     stages {
+
         stage('Preparar Entorno Python') {
             steps {
                 echo "Instalando dependencias del backend..."
@@ -21,23 +22,20 @@ pipeline {
                     if [ -f requirements.txt ]; then
                         pip install -r requirements.txt
                     fi
+                    pip install coverage
                 """
             }
         }
 
-        stage('Ejecutar pruebas Python (unittest)') {
+        stage('Ejecutar pruebas y Coverage') {
             steps {
-                echo "Ejecutando tests unitarios..."
+                echo "Ejecutando pruebas unitarias y generando coverage..."
                 sh """
                     cd $BACKEND_DIR
+                    coverage run -m unittest
+                    coverage xml
                     python3 -m unittest test_app.py > ../$REPORT_FILE 2>&1
                 """
-            }
-            post {
-                always {
-                    echo "Archivando resultados de pruebas..."
-                    archiveArtifacts artifacts: "$REPORT_FILE", fingerprint: true
-                }
             }
         }
 
@@ -49,45 +47,48 @@ pipeline {
 
         stage('Construir imágenes Docker') {
             steps {
-                echo "Aquí iría la construcción de tus imágenes Docker..."
+                echo "Aquí iría la construcción de imágenes Docker..."
             }
         }
 
         stage('Levantar stack con Docker Compose') {
             steps {
-                echo "Aquí iría el comando para levantar tu stack con docker-compose..."
+                echo "Aquí se levantaría el stack con docker-compose..."
             }
         }
 
         stage('Ejecutar Tests E2E') {
             steps {
-                echo "Aquí irían tus pruebas End-to-End..."
+                echo "Aquí irían tus pruebas E2E..."
             }
         }
 
         stage('Detener contenedores') {
             steps {
-                echo "Aquí irías a detener tus contenedores..."
+                echo "Aquí se detendrían los contenedores..."
             }
         }
 
         stage('Listar Artefactos') {
             steps {
                 echo "Artifacts generados:"
-                sh "ls -l $REPORT_FILE || echo 'No se generó artifact.'"
+                sh "ls -l coverage.xml || echo 'No existe coverage.xml'"
+                sh "ls -l $REPORT_FILE || echo 'No existe $REPORT_FILE'"
             }
         }
     }
 
     post {
         always {
-            echo "Pipeline finalizado. Revisar logs y artefactos."
-        }
-        failure {
-            echo "PIPELINE FALLIDO"
+            echo 'Fin de la ejecución del pipeline'
+            echo 'Publicando artefactos...'
+            archiveArtifacts artifacts: 'coverage.xml, report_backend.txt', fingerprint: true
         }
         success {
-            echo "PIPELINE FINALIZADO CON ÉXITO"
+            echo 'Pipeline ejecutado correctamente!'
+        }
+        failure {
+            echo 'El pipeline falló.'
         }
     }
 }

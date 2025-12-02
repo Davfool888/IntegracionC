@@ -2,3 +2,9 @@ backend/venv/
 __pycache__/
 *.pyc
 instance/
+# Coverage
+backend/.coverage
+backend/coverage.xml
+
+# Jenkins reports
+report_backend.txt
