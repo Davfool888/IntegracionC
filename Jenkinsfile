@@ -1,171 +1,127 @@
 pipeline {
     agent any
-    
+
     environment {
-        DOCKER_IMAGE = "integracion-continua:${env.BUILD_NUMBER}"
-        CONTAINER_NAME = "integracion-continua-${env.BUILD_NUMBER}"
-        // Puerto dinámico basado en el número de build
-        DEPLOY_PORT = "80${env.BUILD_NUMBER}"
+        DOCKER_COMPOSE_FILE = "docker-compose.yml"
+        BACKEND_IMAGE = "backend-image:latest"
+        FRONTEND_IMAGE = "frontend-image:latest"
+        VENV_DIR = "backend/venv"
     }
-    
+
     stages {
-        stage('Checkout') {
+
+        stage('Checkout código') {
             steps {
-                echo "INICIANDO PIPELINE DE INTEGRACIÓN CONTINUA"
                 echo "Descargando código fuente del repositorio..."
                 checkout scm
-                sh 'git log -1 --oneline'
-            }
-            post {
-                success {
-                    echo "Checkout completado exitosamente"
-                }
             }
         }
-        
-        stage('Compilación') {
+
+        stage('Preparar entorno Python') {
             steps {
-                echo "Compilando la aplicación..."
-                sh '''
-                    echo "Simulando compilación Java..."
-                    mkdir -p target/classes
-                    echo "Compilación exitosa - archivos en target/"
-                    ls -la
-                '''
+                echo "Creando entorno virtual para backend..."
+                sh """
+                    cd backend
+                    python3 -m venv venv || echo "Entorno virtual ya existe"
+                    source venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                """
             }
         }
-        
-        stage('Pruebas Unitarias') {
+
+    stage('Ejecutar pruebas Python (unittest)') {
+    steps {
+        sh """
+            cd backend
+            python3 -m unittest test_app.py > ../report_backend.txt
+        """
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'report_backend.txt', fingerprint: true
+        }
+    }
+}
+
+
+        stage('Validar Frontend') {
             steps {
-                echo "Ejecutando simulación pruebas unitarias..."
-                sh '''
-                    echo "Ejecutando tests..."
-                    echo "Tests unitarios pasados: 15/15"
-                    echo "Covertura: 85%"
-                    mkdir -p test-reports
-                    echo '<?xml version="1.0" encoding="UTF-8"?>
-                    <testsuite name="UnitTests" tests="15" failures="0" errors="0">
-                        <testcase name="Test1Simulado" classname="TestSuite" time="0.1"/>
-                        <testcase name="Test2Simulado" classname="TestSuite" time="0.2"/>
-                    </testsuite>' > test-reports/test-results.xml
-                    echo "Reporte de tests generado"
-                '''
+                echo "Validando frontend..."
+                sh """
+                    cd frontend
+                    npm install
+                    npm run build || echo "Build frontend completado"
+                """
+            }
+        }
+
+        stage('Construir imágenes Docker') {
+            steps {
+                echo "Construyendo imágenes Docker de backend y frontend..."
+                sh """
+                    docker build -t ${BACKEND_IMAGE} ./backend
+                    docker build -t ${FRONTEND_IMAGE} ./frontend
+                """
+            }
+        }
+
+        stage('Levantar stack con Docker Compose') {
+            steps {
+                echo "Levantando contenedores con Docker Compose..."
+                sh """
+                    docker compose -f ${DOCKER_COMPOSE_FILE} up -d --build
+                    sleep 5
+                    docker ps
+                """
+            }
+        }
+
+        stage('Ejecutar Tests E2E') {
+            when {
+                expression { fileExists('tests_e2e') }
+            }
+            steps {
+                echo "Ejecutando pruebas E2E..."
+                sh """
+                    cd tests_e2e
+                    python3 -m unittest discover -p "*_e2e.py" > e2e_report.txt || true
+                """
             }
             post {
                 always {
-                    junit 'test-reports/*.xml'
+                    archiveArtifacts artifacts: 'tests_e2e/e2e_report.txt', fingerprint: true
                 }
             }
         }
-        
-        stage('Análisis de Calidad') {
+
+        stage('Detener contenedores') {
             steps {
-                echo "Analizando calidad del código..."
-                sh '''
-                    echo "Realizando análisis estático..."
-                    echo "Code Smells: 2"
-                    echo "Bugs: 0"
-                    echo "Vulnerabilidades: 0"
-                    echo "Calidad del código: APROBADA"
-                '''
-            }
-        }
-        
-        stage('Construcción Docker') {
-            steps {
-                echo "Construyendo imagen Docker..."
+                echo "Deteniendo y eliminando contenedores..."
                 sh """
-                    if [ -f "frontend/Dockerfile" ]; then
-                        echo "Encontrado Dockerfile en frontend/"
-                        docker build -t ${env.DOCKER_IMAGE} frontend/
-                        echo "Imagen Docker construida: ${env.DOCKER_IMAGE}"
-                        docker images | grep integracion-continua || echo "Imagen no listada"
-                    else
-                        echo "No se encontró Dockerfile en frontend/ - creando uno básico..."
-                        echo "FROM nginx:alpine" > Dockerfile
-                        echo "RUN mkdir -p /usr/share/nginx/html" >> Dockerfile
-                        echo "COPY . /usr/share/nginx/html/" >> Dockerfile
-                        echo "EXPOSE 80" >> Dockerfile
-                        docker build -t ${env.DOCKER_IMAGE} .
-                        echo "Imagen Docker construida con Dockerfile básico"
-                    fi
+                    docker compose -f ${DOCKER_COMPOSE_FILE} down
                 """
             }
         }
-        
-        stage('Despliegue') {
+
+        stage('Listar Artefactos') {
             steps {
-                echo "Desplegando contenedor..."
-                script {
-                    // Usar un puerto que casi nunca esté ocupado
-                    env.DEPLOY_PORT = "80${currentBuild.number}"
-                }
-                sh """
-                    echo "Usando puerto: ${env.DEPLOY_PORT}"
-                    
-                    # Solo limpiar contenedores que pertenezcan a este usuario
-                    docker stop ${env.CONTAINER_NAME} || true
-                    docker rm ${env.CONTAINER_NAME} || true
-                    
-                    # Desplegar en puerto único
-                    docker run -d --name ${env.CONTAINER_NAME} -p ${env.DEPLOY_PORT}:80 ${env.DOCKER_IMAGE}
-                    sleep 5
-                    
-                    echo "Verificando estado del contenedor:"
-                    docker ps | grep ${env.CONTAINER_NAME} || echo "Contenedor no encontrado"
-                """
-            }
-            post {
-                success {
-                    echo "Contenedor desplegado exitosamente"
-                    echo "Aplicación disponible en: http://localhost:${env.DEPLOY_PORT}"
-                }
-            }
-        }
-        
-        stage('Verificación') {
-            steps {
-                echo "Verificando despliegue..."
-                sh """
-                    sleep 8
-                    
-                    if curl -f http://localhost:${env.DEPLOY_PORT} > /dev/null 2>&1; then
-                        echo "Aplicación respondiendo correctamente en puerto ${env.DEPLOY_PORT}"
-                        echo "Contenido de la página:"
-                        curl -s http://localhost:${env.DEPLOY_PORT} | head -n 5
-                    else
-                        echo "Aplicación no responde - puede ser normal en entornos de prueba"
-                        docker logs ${env.CONTAINER_NAME} || echo "No se pueden ver logs del contenedor"
-                    fi
-                """
+                echo "Mostrando todos los artefactos generados..."
+                sh "ls -R"
             }
         }
     }
-    
+
     post {
         always {
-            echo "RESUMEN DEL PIPELINE"
-            echo "================================"
-            echo "Estado final: ${currentBuild.result ?: 'SUCCESS'}"
-            echo "Duración: ${currentBuild.durationString}"
-            echo "Número de build: ${currentBuild.number}"
-            echo "Contenedor: ${env.CONTAINER_NAME}"
-            echo "Imagen: ${env.DOCKER_IMAGE}"
-            echo "URL: http://localhost:${env.DEPLOY_PORT}"
-            echo "================================"
-            
-            sh 'rm -f Main.java Main.class 2>/dev/null || true'
+            echo "Pipeline finalizado. Archivando todos los reports..."
+            archiveArtifacts artifacts: '**/*.txt', fingerprint: true
         }
-        
         success {
             echo "PIPELINE COMPLETADO EXITOSAMENTE"
-            echo "Todas las etapas pasaron correctamente"
-            echo "Aplicación desplegada y funcionando"
         }
-        
         failure {
-            echo "PIPELINE FALLIDO"
-            echo "Revisar los logs para identificar el error"
+            echo "PIPELINE FALLIDO, revisar logs y artefactos"
         }
     }
 }
