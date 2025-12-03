@@ -72,7 +72,8 @@ pipeline {
         stage('Listar Artefactos') {
             steps {
                 echo "Artifacts generados:"
-                sh "ls -l coverage.xml || echo 'No existe coverage.xml'"
+               
+                sh "ls -l $BACKEND_DIR/coverage.xml || echo 'No existe coverage.xml'"
                 sh "ls -l $REPORT_FILE || echo 'No existe $REPORT_FILE'"
             }
         }
@@ -80,15 +81,13 @@ pipeline {
 
     post {
         always {
-            echo 'Fin de la ejecución del pipeline'
-            echo 'Publicando artefactos...'
-            archiveArtifacts artifacts: 'coverage.xml, report_backend.txt', fingerprint: true
-        }
-        success {
-            echo 'Pipeline ejecutado correctamente!'
-        }
-        failure {
-            echo 'El pipeline falló.'
+            echo "Fin de la ejecución del pipeline"
+            echo "Publicando artefactos..."
+
+    
+            archiveArtifacts artifacts: 'backend/coverage.xml, report_backend.txt', fingerprint: true
+            
+            echo "Pipeline ejecutado correctamente!"
         }
     }
 }
